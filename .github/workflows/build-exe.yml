@@ -64,7 +64,7 @@ jobs:
           }
           Compress-Archive -Path "dist/CloudStore/*" -DestinationPath "CloudStore-Windows.zip" -Force
           $zipSize = (Get-Item "CloudStore-Windows.zip").Length / 1MB
-          Write-Host "ZIP size: $([math]::Round($zipSize, 2)) MB
+          Write-Host "ZIP size: $([math]::Round($zipSize, 2)) MB"
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
             构建提交: ${{ github.sha }}
             操作系统: Windows (windows-latest)
             构建方式: GitHub Actions 自动构建
-            使用方法: 解压 CloudStore-Windows.zip → 双击 CloudStore.exe
+            使用方法: 解压 CloudStore-Windows.zip -> 双击 CloudStore.exe
           files: |
             backend/CloudStore-Windows.zip
           prerelease: ${{ startsWith(github.ref, 'refs/tags/') == false }}
