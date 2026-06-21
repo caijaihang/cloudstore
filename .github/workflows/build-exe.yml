@@ -1,0 +1,105 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python 版本'
+        required: false
+        default: '3.11'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version || '3.11' }}
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install django djangorestframework django-cors-headers pyinstaller pillow
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Prepare database
+        run: |
+          cd backend
+          python manage.py makemigrations files --no-input
+          python manage.py migrate --run-syncdb --no-input
+
+      - name: Build with PyInstaller
+        run: |
+          cd backend
+          pyinstaller cloudstore.spec --clean --noconfirm
+
+      - name: Package distribution into ZIP
+        run: |
+          cd backend
+          if (Test-Path "dist/CloudStore/data") {
+            Remove-Item -Recurse -Force "dist/CloudStore/data" -ErrorAction SilentlyContinue
+          }
+          Compress-Archive -Path "dist/CloudStore/*" -DestinationPath "CloudStore-Windows.zip" -Force
+          $zipSize = (Get-Item "CloudStore-Windows.zip").Length / 1MB
+          Write-Host "ZIP size: $([math]::Round($zipSize, 2)) MB
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudStore-Windows-EXE
+          path: backend/dist/CloudStore/
+          retention-days: 30
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudStore-Windows-ZIP
+          path: backend/CloudStore-Windows.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('CloudStore {0}', github.ref_name) || 'CloudStore Latest Build' }}
+          body: |
+            # CloudStore - 大文件永久免费存储系统
+            构建提交: ${{ github.sha }}
+            操作系统: Windows (windows-latest)
+            构建方式: GitHub Actions 自动构建
+            使用方法: 解压 CloudStore-Windows.zip → 双击 CloudStore.exe
+          files: |
+            backend/CloudStore-Windows.zip
+          prerelease: ${{ startsWith(github.ref, 'refs/tags/') == false }}
+          generate_release_notes: true
+
+      - name: Build summary
+        run: |
+          Write-Host "============================================"
+          Write-Host "  Build completed successfully!"
+          Write-Host "  Visit: https://github.com/${{ github.repository }}/releases"
+          Write-Host "============================================"
